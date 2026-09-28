@@ -1,10 +1,11 @@
 mod commands;
+mod listeners;
 mod state;
 
 use clap::Parser;
 use poise::{
     Framework,
-    serenity_prelude::{ClientBuilder, GatewayIntents},
+    serenity_prelude::{Client, ClientBuilder, GatewayIntents},
 };
 
 use crate::{commands::toggle_channel, state::BotData};
@@ -18,7 +19,15 @@ async fn main() -> Result<(), anyhow::Error> {
     }
     let args = Args::parse();
 
-    start_bot(&args.bot_token).await?;
+    let client = make_client(&args.bot_token).await?;
+    // http needs to be set before starting listeners
+    // don't care if it was already initialized
+    let _ = state::set_http(client.http.clone());
+
+    listeners::register_listeners().await?;
+
+    let mut client = client;
+    start_bot(&mut client).await?;
 
     Ok(())
 }
@@ -31,7 +40,7 @@ struct Args {
 }
 
 /// sets up the bot and then starts it. starting the bot is blocking.
-async fn start_bot(bot_token: impl AsRef<str>) -> Result<(), anyhow::Error> {
+async fn make_client(bot_token: impl AsRef<str>) -> Result<Client, anyhow::Error> {
     // intents the bot needs
     let intents = GatewayIntents::GUILD_MESSAGES | GatewayIntents::MESSAGE_CONTENT;
 
@@ -43,8 +52,6 @@ async fn start_bot(bot_token: impl AsRef<str>) -> Result<(), anyhow::Error> {
         .setup(|ctx, _ready, framework| {
             Box::pin(async move {
                 poise::builtins::register_globally(ctx, &framework.options().commands).await?;
-                // don't care if it was already initialized
-                let _ = crate::state::set_http(ctx.http.clone());
                 Ok(BotData)
             })
         })
@@ -52,8 +59,10 @@ async fn start_bot(bot_token: impl AsRef<str>) -> Result<(), anyhow::Error> {
 
     ClientBuilder::new(bot_token, intents)
         .framework(framework)
-        .await?
-        .start()
         .await
         .map_err(Into::into)
+}
+
+async fn start_bot(client: &mut Client) -> Result<(), anyhow::Error> {
+    client.start().await.map_err(Into::into)
 }

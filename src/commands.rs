@@ -14,26 +14,24 @@ type Context<'a> = poise::Context<'a, BotData, anyhow::Error>;
 )]
 /// registers (or removes) the current channel for bot messages
 pub async fn toggle_channel(ctx: Context<'_>) -> Result<(), anyhow::Error> {
-    let enabled = state::toggle_channel(ctx.channel_id());
+    let enabled = state::toggle_channel(ctx.channel_id()).await;
     ctx.send(
         CreateReply::default()
-            .content(
-                ctx.guild_channel()
-                    .await
-                    .map(|ch| {
-                        format!(
-                            "channel \"{}\" is now {}abled",
-                            ch.name,
-                            if enabled { "en" } else { "dis" }
-                        )
-                    })
-                    .unwrap_or_else(|| {
-                        format!(
-                            "bot will no{} message you",
-                            if enabled { "w" } else { " longer" }
-                        )
-                    }),
-            )
+            .content(ctx.guild_channel().await.map_or_else(
+                || {
+                    format!(
+                        "bot will no{} message you",
+                        if enabled { "w" } else { " longer" }
+                    )
+                },
+                |ch| {
+                    format!(
+                        "channel \"{}\" is now {}abled",
+                        ch.name,
+                        if enabled { "en" } else { "dis" }
+                    )
+                },
+            ))
             .ephemeral(true),
     )
     .await?;

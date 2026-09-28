@@ -2,13 +2,14 @@
 
 use std::{
     collections::HashSet,
-    sync::{Arc, LazyLock, Mutex, OnceLock},
+    sync::{Arc, LazyLock, OnceLock},
 };
 
 use poise::serenity_prelude::{ChannelId, Http};
+use tokio::sync::{RwLock, RwLockReadGuard};
 
 static HTTP: OnceLock<Arc<Http>> = OnceLock::new();
-static CHANNELS: LazyLock<Mutex<HashSet<ChannelId>>> = LazyLock::new(Mutex::default);
+static CHANNELS: LazyLock<RwLock<HashSet<ChannelId>>> = LazyLock::new(RwLock::default);
 
 #[derive(Debug)]
 pub struct BotData;
@@ -24,8 +25,8 @@ pub fn get_http() -> &'static Http {
 }
 
 /// toggles a given channel, returning whether it is now enabed or not
-pub fn toggle_channel(id: ChannelId) -> bool {
-    let mut channels = CHANNELS.lock().unwrap();
+pub async fn toggle_channel(id: ChannelId) -> bool {
+    let mut channels = CHANNELS.write().await;
     let contains = channels.contains(&id);
     if contains {
         channels.remove(&id);
@@ -33,4 +34,8 @@ pub fn toggle_channel(id: ChannelId) -> bool {
         channels.insert(id);
     }
     !contains
+}
+
+pub async fn get_channels<'a>() -> RwLockReadGuard<'a, HashSet<ChannelId>> {
+    CHANNELS.read().await
 }
