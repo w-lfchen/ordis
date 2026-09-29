@@ -1,3 +1,5 @@
+mod tenet;
+
 use std::sync::Arc;
 
 use warframe::worldstate::{Change, Client, queryable::Fissure};
