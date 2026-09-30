@@ -1733,6 +1733,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "clap",
+ "derive_more",
  "dotenvy",
  "poise",
  "regex",

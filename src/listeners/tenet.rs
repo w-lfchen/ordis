@@ -1,18 +1,40 @@
 //! tenet weapon info fetching
 
-use anyhow::bail;
+use std::collections::HashMap;
+
+use anyhow::{Context, bail};
 use regex::Regex;
 
-/// represents a tenet weapon that can be bought from ergo glast
-/// TODO: adjust field types
+/// the types of bonus elements
+#[derive(Debug, derive_more::Display, derive_more::FromStr)]
+pub enum BonusElement {
+    Impact,
+    Heat,
+    Cold,
+    Electricity,
+    Toxin,
+    Magnetic,
+    Radiation,
+}
+
+/// represents a weapon's bonus element and its bonus percentage
 #[derive(Debug)]
-pub struct TenetWeapon {
-    weapon: String,
-    element: String,
+pub struct BonusData {
+    element: BonusElement,
     bonus: f64,
 }
 
-pub async fn get_tenet_weapons() -> Result<Vec<TenetWeapon>, anyhow::Error> {
+/// represents the state of ergo glast's shop
+#[derive(Debug)]
+pub struct TenetState {
+    agendus: BonusData,
+    exec: BonusData,
+    ferrox: BonusData,
+    grigori: BonusData,
+    livia: BonusData,
+}
+
+pub async fn get_tenet_state() -> Result<TenetState, anyhow::Error> {
     const PKG_NAME: &str = env!("CARGO_PKG_NAME");
     const TENET_WIKI_URL: &str = "https://wiki.warframe.com/api.php?action=query&prop=revisions&rvprop=content&rvslots=main&titles=Tenet_Weapons&format=json";
 
@@ -34,20 +56,28 @@ pub async fn get_tenet_weapons() -> Result<Vec<TenetWeapon>, anyhow::Error> {
     let text = response.text().await?;
     // first remove all whitespace from the text to make regex capturing easier
     // this operates on the entire wiki article, might be worth improving somehow
-    let text = text
-        .split_whitespace()
-        .fold(String::with_capacity(text.len()), |x, y| x + y);
+    let text: String = text.split_whitespace().collect();
 
-    weapon_capture
+    let mut map = weapon_capture
         .captures_iter(&text)
         .map(|c| {
             // TODO: extract can panic, which might be a bad idea
             let (_full_match, [weapon, element, bonus]) = c.extract();
-            Ok(TenetWeapon {
-                weapon: weapon.into(),
-                element: element.into(),
-                bonus: bonus.parse()?,
-            })
+            Ok((
+                weapon,
+                BonusData {
+                    element: element.parse()?,
+                    bonus: bonus.parse()?,
+                },
+            ))
         })
-        .collect()
+        .collect::<Result<HashMap<_, _>, anyhow::Error>>()?;
+
+    Ok(TenetState {
+        agendus: map.remove("Agendus").context("no agendus")?,
+        exec: map.remove("Exec").context("no exec")?,
+        ferrox: map.remove("Ferrox").context("no ferrox")?,
+        grigori: map.remove("Grigori").context("no grigori")?,
+        livia: map.remove("Livia").context("no livia")?,
+    })
 }
