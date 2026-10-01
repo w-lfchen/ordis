@@ -1,9 +1,15 @@
 //! tenet weapon info fetching
 
-use std::collections::HashMap;
+use std::{
+    collections::HashMap,
+    time::{Duration, SystemTime},
+};
 
 use anyhow::{Context, bail};
 use regex::Regex;
+use tokio::time::{Instant, sleep_until};
+
+use crate::state;
 
 /// the types of bonus elements
 #[derive(Debug, derive_more::Display, derive_more::FromStr)]
@@ -34,7 +40,7 @@ pub struct TenetState {
     livia: BonusData,
 }
 
-pub async fn get_tenet_state() -> Result<TenetState, anyhow::Error> {
+async fn get_tenet_state() -> Result<TenetState, anyhow::Error> {
     const PKG_NAME: &str = env!("CARGO_PKG_NAME");
     const TENET_WIKI_URL: &str = "https://wiki.warframe.com/api.php?action=query&prop=revisions&rvprop=content&rvslots=main&titles=Tenet_Weapons&format=json";
 
@@ -80,4 +86,41 @@ pub async fn get_tenet_state() -> Result<TenetState, anyhow::Error> {
         grigori: map.remove("Grigori").context("no grigori")?,
         livia: map.remove("Livia").context("no livia")?,
     })
+}
+
+// TODO: improve, this is a rough draft of an idea
+pub async fn tenet_listener() -> Result<(), anyhow::Error> {
+    let now = SystemTime::now();
+    // wiki page starts counter at 3/12/2015
+    const START_UNIX_TIMESTAMP: u64 = 1449100800;
+    // wiki has 4d looptime
+    const INTERVAL: Duration = Duration::from_hours(4 * 24);
+
+    let start = std::time::SystemTime::UNIX_EPOCH + Duration::from_secs(START_UNIX_TIMESTAMP);
+
+    // how many times the interval has passed, rounded down
+    let passed_intervals = now
+        .duration_since(start)
+        .context("current time is earlier than december 2015")?
+        .as_secs()
+        / INTERVAL.as_secs();
+    // next time glast rotates shop
+    let next_rotation = start + (INTERVAL * ((passed_intervals + 1) as u32));
+    // duration until next glast rotation
+    let next_rotation = next_rotation
+        .duration_since(now)
+        .context("next rotation is before now")?;
+
+    // add an initial 2 hours in hopes of the wiki being updated after 2 hours
+    let mut instant = Instant::now() + next_rotation + Duration::from_hours(2);
+    loop {
+        sleep_until(instant).await;
+        let text = format!("tenet state:\n{:#?}", get_tenet_state().await?);
+        let http = state::get_http();
+        for ch in state::get_channels().await.iter() {
+            ch.say(http, &text).await?;
+        }
+        // calculate time until next tenet rotation
+        instant += INTERVAL;
+    }
 }

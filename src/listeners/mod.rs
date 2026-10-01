@@ -10,6 +10,7 @@ use crate::state;
 struct WfClientState;
 
 pub async fn register_listeners() -> Result<(), anyhow::Error> {
+    let _ = tokio::spawn(tenet::tenet_listener());
     let client = Arc::new(Client::default());
     // TOOD: why is this future not send when using the method without state?
     let _ = tokio::spawn(async move {
