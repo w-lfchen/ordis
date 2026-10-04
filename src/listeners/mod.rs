@@ -9,17 +9,16 @@ use crate::state;
 #[derive(Debug, Clone)]
 struct WfClientState;
 
-pub async fn register_listeners() -> Result<(), anyhow::Error> {
-    let _ = tokio::spawn(tenet::tenet_listener());
+pub fn register_listeners() {
+    tokio::spawn(tenet::tenet_listener());
     let client = Arc::new(Client::default());
     // TOOD: why is this future not send when using the method without state?
-    let _ = tokio::spawn(async move {
+    tokio::spawn(async move {
         client
             .clone()
             .call_on_nested_update_with_state(on_fissure_update, WfClientState)
             .await
     });
-    Ok(())
 }
 
 async fn on_fissure_update(_state: WfClientState, fissure: &Fissure, change: Change) {

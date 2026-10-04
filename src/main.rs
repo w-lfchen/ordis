@@ -24,7 +24,7 @@ async fn main() -> Result<(), anyhow::Error> {
     // don't care if it was already initialized
     let _ = state::set_http(client.http.clone());
 
-    listeners::register_listeners().await?;
+    listeners::register_listeners();
 
     let mut client = client;
     start_bot(&mut client).await?;

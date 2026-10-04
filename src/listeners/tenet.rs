@@ -6,6 +6,7 @@ use std::{
 };
 
 use anyhow::{Context, bail};
+use poise::serenity_prelude::{Color, CreateEmbed, CreateEmbedFooter, CreateMessage};
 use regex::Regex;
 use tokio::time::{Instant, sleep_until};
 
@@ -13,7 +14,7 @@ use crate::state;
 
 /// the types of bonus elements
 #[derive(Debug, derive_more::Display, derive_more::FromStr)]
-pub enum BonusElement {
+enum BonusElement {
     Impact,
     Heat,
     Cold,
@@ -25,14 +26,14 @@ pub enum BonusElement {
 
 /// represents a weapon's bonus element and its bonus percentage
 #[derive(Debug)]
-pub struct BonusData {
+struct BonusData {
     element: BonusElement,
     bonus: f64,
 }
 
 /// represents the state of ergo glast's shop
 #[derive(Debug)]
-pub struct TenetState {
+struct TenetState {
     agendus: BonusData,
     exec: BonusData,
     ferrox: BonusData,
@@ -88,15 +89,43 @@ async fn get_tenet_state() -> Result<TenetState, anyhow::Error> {
     })
 }
 
+pub async fn tenet_embed() -> Result<CreateEmbed, anyhow::Error> {
+    let state = get_tenet_state().await?;
+    Ok(CreateEmbed::new()
+        .color(Color::from_rgb(92, 171, 250))
+        .title("Current Tenet Rotation")
+        .url("https://wiki.warframe.com/w/Tenet_Weapons")
+        .description(format!(
+            "\
+                Agendus: {}% {}\n\
+                Exec: {}% {}\n\
+                Ferrox: {}% {}\n\
+                Grigori: {}% {}\n\
+                Livia: {}% {}\n\
+            ",
+            state.agendus.bonus,
+            state.agendus.element,
+            state.exec.bonus,
+            state.exec.element,
+            state.ferrox.bonus,
+            state.ferrox.element,
+            state.grigori.bonus,
+            state.grigori.element,
+            state.livia.bonus,
+            state.livia.element,
+        ))
+        .footer(CreateEmbedFooter::new("These values are player-reported.")))
+}
+
 // TODO: improve, this is a rough draft of an idea
 pub async fn tenet_listener() -> Result<(), anyhow::Error> {
-    let now = SystemTime::now();
     // wiki page starts counter at 3/12/2015
-    const START_UNIX_TIMESTAMP: u64 = 1449100800;
+    const START_UNIX_TIMESTAMP: u64 = 1_449_100_800;
     // wiki has 4d looptime
     const INTERVAL: Duration = Duration::from_hours(4 * 24);
 
-    let start = std::time::SystemTime::UNIX_EPOCH + Duration::from_secs(START_UNIX_TIMESTAMP);
+    let now = SystemTime::now();
+    let start = SystemTime::UNIX_EPOCH + Duration::from_secs(START_UNIX_TIMESTAMP);
 
     // how many times the interval has passed, rounded down
     let passed_intervals = now
@@ -105,7 +134,7 @@ pub async fn tenet_listener() -> Result<(), anyhow::Error> {
         .as_secs()
         / INTERVAL.as_secs();
     // next time glast rotates shop
-    let next_rotation = start + (INTERVAL * ((passed_intervals + 1) as u32));
+    let next_rotation = start + (INTERVAL * u32::try_from(passed_intervals + 1)?);
     // duration until next glast rotation
     let next_rotation = next_rotation
         .duration_since(now)
@@ -115,10 +144,10 @@ pub async fn tenet_listener() -> Result<(), anyhow::Error> {
     let mut instant = Instant::now() + next_rotation + Duration::from_hours(2);
     loop {
         sleep_until(instant).await;
-        let text = format!("tenet state:\n{:#?}", get_tenet_state().await?);
         let http = state::get_http();
         for ch in state::get_channels().await.iter() {
-            ch.say(http, &text).await?;
+            ch.send_message(http, CreateMessage::new().add_embed(tenet_embed().await?))
+                .await?;
         }
         // calculate time until next tenet rotation
         instant += INTERVAL;
